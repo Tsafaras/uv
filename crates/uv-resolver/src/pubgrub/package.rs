@@ -176,6 +176,10 @@ impl PubGrubPackage {
         )
     }
 
+    pub(crate) fn is_root(&self) -> bool {
+        matches!(&**self, PubGrubPackageInner::Root(_))
+    }
+
     /// This simplifies the markers on this package (if any exist) using the
     /// given Python requirement as assumed context.
     ///

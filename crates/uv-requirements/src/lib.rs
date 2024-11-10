@@ -1,13 +1,12 @@
-use uv_distribution_types::{BuiltDist, Dist, GitSourceDist, SourceDist};
-use uv_git::GitUrl;
-use uv_pypi_types::{Requirement, RequirementSource};
-
 pub use crate::extras::*;
 pub use crate::lookahead::*;
 pub use crate::source_tree::*;
 pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
+use uv_distribution_types::{BuiltDist, Dist, GitSourceDist, SourceDist};
+use uv_git::GitUrl;
+use uv_pypi_types::{Requirement, RequirementSource};
 
 mod extras;
 mod lookahead;

@@ -23,7 +23,7 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
-    IncompletePackage, ResolverEnvironment, UnavailablePackage, UnavailableReason,
+    DerivationChain, IncompletePackage, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
 use crate::Options;
 
@@ -31,6 +31,9 @@ use crate::Options;
 pub enum ResolveError {
     #[error(transparent)]
     Client(#[from] uv_client::Error),
+
+    #[error(transparent)]
+    Distribution(#[from] uv_distribution::Error),
 
     #[error("The channel closed unexpectedly")]
     ChannelClosed,
@@ -87,20 +90,36 @@ pub enum ResolveError {
     ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
     #[error("Failed to download `{0}`")]
-    Download(Box<BuiltDist>, #[source] uv_distribution::Error),
+    Download(
+        Box<BuiltDist>,
+        DerivationChain,
+        #[source] Arc<uv_distribution::Error>,
+    ),
 
     #[error("Failed to download and build `{0}`")]
-    DownloadAndBuild(Box<SourceDist>, #[source] uv_distribution::Error),
+    DownloadAndBuild(
+        Box<SourceDist>,
+        DerivationChain,
+        #[source] Arc<uv_distribution::Error>,
+    ),
 
     #[error("Failed to read `{0}`")]
-    Read(Box<BuiltDist>, #[source] uv_distribution::Error),
+    Read(
+        Box<BuiltDist>,
+        DerivationChain,
+        #[source] Arc<uv_distribution::Error>,
+    ),
 
     // TODO(zanieb): Use `thiserror` in `InstalledDist` so we can avoid chaining `anyhow`
     #[error("Failed to read metadata from installed package `{0}`")]
-    ReadInstalled(Box<InstalledDist>, #[source] anyhow::Error),
+    ReadInstalled(Box<InstalledDist>, DerivationChain, #[source] anyhow::Error),
 
     #[error("Failed to build `{0}`")]
-    Build(Box<SourceDist>, #[source] uv_distribution::Error),
+    Build(
+        Box<SourceDist>,
+        DerivationChain,
+        #[source] Arc<uv_distribution::Error>,
+    ),
 
     #[error(transparent)]
     NoSolution(#[from] NoSolutionError),

@@ -1,7 +1,6 @@
-use std::fmt::Write;
-
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::fmt::Write;
 use tracing::{debug, enabled, Level};
 
 use uv_cache::Cache;
@@ -383,7 +382,7 @@ pub(crate) async fn pip_install(
         .build();
 
     // Resolve the requirements.
-    let resolution = match operations::resolve(
+    let graph = match operations::resolve(
         requirements,
         constraints,
         overrides,
@@ -411,13 +410,15 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(resolution) => Resolution::from(resolution),
+        Ok(resolution) => resolution,
         Err(err) => {
             return diagnostics::OperationDiagnostic::default()
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
     };
+
+    let resolution = Resolution::from(&graph);
 
     // Sync the environment.
     match operations::install(
@@ -446,7 +447,7 @@ pub(crate) async fn pip_install(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::with_graph(&graph)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt::{Display, Formatter};
 
 use indexmap::IndexSet;
@@ -27,15 +27,15 @@ use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::{
-    InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
-    VersionsResponse,
+    DerivationChain, DerivationStep, InMemoryIndex, MetadataResponse, Options, PythonRequirement,
+    RequiresPython, ResolveError, VersionsResponse,
 };
 
 pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
 
 /// A complete resolution graph in which every node represents a pinned package and every edge
 /// represents a dependency between two pinned packages.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResolutionGraph {
     /// The underlying graph.
     pub(crate) petgraph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
@@ -91,6 +91,50 @@ struct PackageRef<'a> {
 }
 
 impl ResolutionGraph {
+    pub fn chain(&self, target: &Dist) -> DerivationChain {
+        // Figure out why a distribution was included in the resolution.
+        let target = self
+            .petgraph
+            .node_indices()
+            .find(|node| {
+                let ResolutionGraphNode::Dist(AnnotatedDist {
+                    dist: ResolvedDist::Installable(dist),
+                    ..
+                }) = &self.petgraph[*node]
+                else {
+                    return false;
+                };
+                target == dist
+            })
+            .expect("every distribution in the resolution graph should be present");
+
+        // Perform a BFS to find the shortest path to the root.
+        let mut queue = VecDeque::new();
+        queue.push_back((target, Vec::new()));
+
+        let mut seen = FxHashSet::default();
+        while let Some((node, mut path)) = queue.pop_front() {
+            if !seen.insert(node) {
+                continue;
+            }
+            match &self.petgraph[node] {
+                ResolutionGraphNode::Root => {
+                    path.reverse();
+                    path.pop();
+                    return DerivationChain::from_iter(path);
+                }
+                ResolutionGraphNode::Dist(AnnotatedDist { name, version, .. }) => {
+                    path.push(DerivationStep::new(name.clone(), version.clone()));
+                    for neighbor in self.petgraph.neighbors_directed(node, Direction::Incoming) {
+                        queue.push_back((neighbor, path.clone()));
+                    }
+                }
+            }
+        }
+
+        unreachable!()
+    }
+
     /// Create a new graph from the resolved PubGrub state.
     pub(crate) fn from_state(
         resolutions: &[Resolution],
@@ -795,6 +839,22 @@ impl Display for ConflictingDistributionError {
     }
 }
 
+impl From<&ResolutionGraph> for uv_distribution_types::Resolution {
+    fn from(graph: &ResolutionGraph) -> Self {
+        Self::new(
+            graph
+                .dists()
+                .map(|node| (node.name().clone(), node.dist.clone()))
+                .collect(),
+            graph
+                .dists()
+                .map(|node| (node.name().clone(), node.hashes.clone()))
+                .collect(),
+            graph.diagnostics.clone(),
+        )
+    }
+}
+
 impl From<ResolutionGraph> for uv_distribution_types::Resolution {
     fn from(graph: ResolutionGraph) -> Self {
         Self::new(
@@ -806,7 +866,7 @@ impl From<ResolutionGraph> for uv_distribution_types::Resolution {
                 .dists()
                 .map(|node| (node.name().clone(), node.hashes.clone()))
                 .collect(),
-            graph.diagnostics,
+            graph.diagnostics.clone(),
         )
     }
 }
