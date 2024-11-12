@@ -1,6 +1,7 @@
+use std::fmt::Write;
+
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::fmt::Write;
 use tracing::{debug, enabled, Level};
 
 use uv_cache::Cache;
